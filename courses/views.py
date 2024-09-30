@@ -22,7 +22,11 @@ class OwnerEditMixin(object):
     a success URL for when the course form is successfully submitted.
     and inherit ownerMixin for query_set
     '''
-class OwnerCourseMixin(OwnerMixin):
+from django.contrib.auth.mixins import LoginRequiredMixin,PermissionRequiredMixin
+
+# this view and mixin for course
+class OwnerCourseMixin(OwnerMixin,LoginRequiredMixin,
+                       PermissionRequiredMixin):
     model = Course
     fields = ['subject', 'title', 'slug', 'overview']
     success_url = reverse_lazy('manage_course_list')
@@ -32,24 +36,151 @@ class OwnerCourseMixin(OwnerMixin):
     Uses a specific template for the course form.'''
 class OwnerCourseEditMixin(OwnerCourseMixin, OwnerEditMixin):
     template_name = 'courses/manage/course/form.html'
+    
 
 '''List course created by user by inherting ownerCourseMixin '''
 class ManageCourseListView(OwnerCourseMixin, ListView):
     template_name = 'courses/manage/course/list.html'
+    permission_required = 'courses.view_course'
 
 
 '''Uses a model form to create a new course it uses the template define in
     ownerCourseEditMixin'''
 class CourseCreateView(OwnerCourseEditMixin, CreateView):   
-    pass
+    permission_required = 'courses.add_course'
 
 '''Allows to edit the existing course so it is OwnerCourseEditMixin'''
 class CourseUpdateView(OwnerCourseEditMixin, UpdateView):
-    pass
+    permission_required = 'courses.change_course'
 
 '''uses ownerCoueseMixin for model'''
 class CourseDeleteView(OwnerCourseMixin, DeleteView):
     template_name = 'courses/manage/course/delete.html'
+    permission_required = 'courses.delete_course'
+
+# this view class for  modules of the courses
+from django.shortcuts import redirect, get_object_or_404
+from django.views.generic.base import TemplateResponseMixin, View
+from .forms import ModuleFormSet
+
+'''TemplateResponseMixin: This mixin takes charge of rendering templates
+and returning an HTTP response. it gives render_to_response()'''
+
+class CourseModuleUpdateView(TemplateResponseMixin, View):
+    template_name = 'courses/manage/module/formset.html'
+    course = None
+    #creating and returning the formset for modules object current course instance
+    #optional data is passed when handiling a post request
+    def get_formset(self, data=None):
+        return ModuleFormSet(instance=self.course,data=data)
+    
+    # fetch the course object and ensure the user is owner of course
+    # dispatch ensures only the owner of course can acess the view 
+    def dispatch(self, request, pk):
+        self.course = get_object_or_404(Course,id=pk,owner=request.user)
+        return super().dispatch(request, pk)
+    
+    # handles the GET request to render the formset
+    def get(self, request, *args, **kwargs):
+        # generates empty formset (without prefilled)
+        formset = self.get_formset()
+        return self.render_to_response({'course': self.course,'formset': formset})
+    
+    # handle the POST request ie.. form submission 
+    def post(self, request, *args, **kwargs):
+        # binds the submitted data to the formset
+        formset = self.get_formset(data=request.POST)
+        # if form is valid saves updating the modules related to course
+        if formset.is_valid():
+            formset.save()
+            return redirect('manage_course_list')
+        # if form is not valid rerender the formset with validation error
+        return self.render_to_response({'course': self.course,'formset': formset})
+
+# this view class for content of the modules
+from django.forms.models import modelform_factory
+from django.apps import apps
+from .models import Module, Content
+'''
+Modelform_factory-- to dynamically generate forms based on the model being used 
+app.get_model()-- to dynamically load based on content type 
+'''
+class ContentCreateUpdateView(TemplateResponseMixin, View):
+    module = None
+    model = None
+    obj = None
+    template_name = 'courses/manage/content/form.html'
+    
+    def get_model(self, model_name):
+        if model_name in ['text', 'video', 'image', 'file']:
+            return apps.get_model(app_label='courses',model_name=model_name)
+        return None
+    
+    def get_form(self, model, *args, **kwargs):
+        Form = modelform_factory(model, exclude=['owner','order','created','updated'])
+        # passed to the form constructor for intializing form
+        return Form(*args, **kwargs)
+    
+    def dispatch(self, request, module_id, model_name, id=None):
+        self.module = get_object_or_404(Module,id=module_id,course__owner=request.user)
+        self.model = self.get_model(model_name)
+        #if id is none it creates new object and else id of the content object is updated
+        if id:
+            self.obj = get_object_or_404(self.model,id=id,owner=request.user)
+        return super().dispatch(request, module_id, model_name, id)
+    
+    def get(self, request, module_id, model_name, id=None):
+        form = self.get_form(self.model, instance=self.obj)
+        return self.render_to_response({'form': form,'object': self.obj})
+    
+    def post(self, request, module_id, model_name, id=None):
+        form = self.get_form(self.model,instance=self.obj,data=request.POST,files=request.FILES)
+        if form.is_valid():
+            obj = form.save(commit=False)
+            obj.owner = request.user
+            obj.save()
+            if not id:
+                # new content
+                Content.objects.create(module=self.module,item=obj)
+            return redirect('module_content_list', self.module.id)
+        return self.render_to_response({'form': form,'object': self.obj})
+    
+class ContentDeleteView(View):
+    def post(self, request, id):
+        content = get_object_or_404(Content,id=id,
+                                    module__course__owner=request.user)
+        module = content.module
+        content.item.delete()
+        content.delete()
+        return redirect('module_content_list', module.id)
+
+class ModuleContentListView(TemplateResponseMixin, View):
+    template_name = 'courses/manage/module/content_list.html'
+    
+    def get(self, request, module_id):
+        module = get_object_or_404(Module,id=module_id,course__owner=request.user)
+        return self.render_to_response({'module': module})
+
+
+from braces.views import CsrfExemptMixin, JsonRequestResponseMixin
+
+class ModuleOrderView(CsrfExemptMixin,JsonRequestResponseMixin,View):
+    def post(self, request):
+        for id, order in self.request_json.items():
+            Module.objects.filter(id=id,course__owner=request.user).update(order=order)
+        return self.render_json_response({'saved': 'OK'})
+
+class ContentOrderView(CsrfExemptMixin,JsonRequestResponseMixin,View):
+    def post(self, request):
+        for id, order in self.request_json.items():
+            Content.objects.filter(id=id,module__course__owner=request.user).update(order=order)
+        return self.render_json_response({'saved': 'OK'})
+
+
+
+
+
+
 
 
 # this done before mixin keep it as reference 
