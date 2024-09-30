@@ -38,6 +38,8 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'courses.apps.CoursesConfig',
+    'students.apps.StudentsConfig',
+
 ]
 
 MIDDLEWARE = [
@@ -123,4 +125,3 @@ STATIC_URL = '/static/'
 LOGIN_REDIRECT_URL = '/'
 # LOGIN_URL = '/login/'
 LOGOUT_REDIRECT_URL = '/accounts/login/'
-    
