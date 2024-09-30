@@ -177,9 +177,30 @@ class ContentOrderView(CsrfExemptMixin,JsonRequestResponseMixin,View):
         for id, order in self.request_json.items():
             Content.objects.filter(id=id,module__course__owner=request.user).update(order=order)
         return self.render_json_response({'saved': 'OK'})
+    
+from django.db.models import Count
+from .models import Subject
+
+class CourseListView(TemplateResponseMixin, View):
+    model = Course
+    template_name = 'courses/course/list.html'
+    
+    def get(self, request, subject=None):
+        # annote is used used for aggeregate function and preobject calculation
+        # it get avilable course with the count
+        subjects = Subject.objects.annotate(total_courses=Count('courses'))
+        courses = Course.objects.annotate(total_modules=Count('modules'))
+        if subject:
+            subject = get_object_or_404(Subject, slug=subject)
+            courses = courses.filter(subject=subject)
+        #method provides templateResponseMixin to render the object 
+        return self.render_to_response({'subjects': subjects,'subject': subject,'courses': courses})
 
 
-
+from django.views.generic.detail import DetailView
+class CourseDetailView(DetailView):
+    model = Course
+    template_name = 'courses/course/detail.html'
 
 
 

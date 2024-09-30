@@ -120,5 +120,7 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 
-LOGIN_REDIRECT_URL = '/course/mine'
-LOGIN_URL = '/login/'
+LOGIN_REDIRECT_URL = '/'
+# LOGIN_URL = '/login/'
+LOGOUT_REDIRECT_URL = '/accounts/login/'
+    
