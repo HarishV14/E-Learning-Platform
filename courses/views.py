@@ -165,6 +165,8 @@ class ModuleContentListView(TemplateResponseMixin, View):
 from braces.views import CsrfExemptMixin, JsonRequestResponseMixin
 
 class ModuleOrderView(CsrfExemptMixin,JsonRequestResponseMixin,View):
+    # process incoming json data
+    # self.request_json contains content item id's and their new order
     def post(self, request):
         for id, order in self.request_json.items():
             Module.objects.filter(id=id,course__owner=request.user).update(order=order)
