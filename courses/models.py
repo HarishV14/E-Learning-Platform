@@ -65,6 +65,7 @@ class Content(models.Model):
     class Meta:
         ordering = ['order']
 
+from django.template.loader import render_to_string
 
 class ItemBase(models.Model):
     # reverse relationship for child models ex text_related file_related
@@ -72,10 +73,17 @@ class ItemBase(models.Model):
     title = models.CharField(max_length=250)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)
+    
     class Meta:
         abstract = True
+        
     def __str__(self):
         return self.title
+    
+    def render(self):
+        return render_to_string(f'courses/content/{self._meta.model_name}.html',
+                                {'item': self})
+
 
 # abstract=true so we can use itembased class
 # In itembased model contains the common fields for other four branch class

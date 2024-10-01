@@ -11,6 +11,10 @@
 <body>
     <div id="header">
         <a href="/" class="logo">Educa</a>
+        {% if perms.courses.view_course %}
+        <a href="{% url 'manage_course_list' %}" class="" style="padding: 10px; color: red;">Manage</a>
+        {% endif %}
+        <a href="{% url 'student_course_list' %}" class="" style="padding: 10px; color: red;">My Courses</a>
         <ul class="menu">
             {% if request.user.is_authenticated %}
             <li><a href="{% url 'logout' %}"> Sign out</a></li>
