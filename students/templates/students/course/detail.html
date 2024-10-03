@@ -1,12 +1,9 @@
 {% extends "base.html" %}
+{% load cache %}
 {% block title %}
 {{ object.title }}
 {% endblock %}
 {% block content %}
-<h1>Debugging Output:</h1>
-<p>Object: {{ object }}</p>
-<p>Module: {{ module }}</p>
-<p>Contents: {{ module.contents.all }}</p>
 <h1>
     {{ module.title }}
 </h1>
@@ -29,11 +26,14 @@
     </ul>
 </div>
 <div class="module">
-    {% for content in module.contents.all %}
-    {% with item=content.item %}
-    <h2>{{ item.title }}</h2>
-    {{ item.render }}
-    {% endwith %}
+    <!-- module.updated_at this is used to change wheneve the module changes ensure the cache is invalidated -->
+{% cache 60 module_contents module.id module.updated_at %}
+    {% for content in module.contents.all %}    
+        {% with item=content.item %}
+            <h2>{{ item.title }}</h2>
+        {{ item.render }}
+        {% endwith %}
     {% endfor %}
+{% endcache %}
 </div>
 {% endblock %}

@@ -44,6 +44,7 @@ class StudentCourseListView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         # this parent class of get_queryset method which retrieves the intial list of course
         qs = super().get_queryset()
+        # print(qs)
         #in that checking the users in the students field of the course then list the course
         return qs.filter(students__in=[self.request.user])
 
@@ -67,8 +68,16 @@ class StudentCourseDetailView(DetailView):
         # if the module id is passed or present in url
         if 'module_id' in self.kwargs:
             # get current module
-            context['module'] = course.modules.get(id=self.kwargs['module_id'])
+            try:
+                context['module'] = course.modules.get(id=self.kwargs['module_id'])
+            except Module.DoesNotExist:
+                context['module'] = None
         else:
             # get first module
-            context['module'] = course.modules.all()[0]
+            modules = course.modules.all()
+            if modules.exists():
+                # Safely get the first module
+                context['module'] = modules.first()
+            else:
+                context['module'] = None 
         return context

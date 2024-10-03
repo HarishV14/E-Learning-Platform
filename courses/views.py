@@ -16,7 +16,11 @@ class OwnerMixin(object):
 class OwnerEditMixin(object):
     def form_valid(self, form):
         form.instance.owner = self.request.user
-        return super().form_valid(form)
+        course = super().form_valid(form)
+        
+        cache.delete("all_subjects")
+        cache.delete("all_courses")
+        return course
 
 ''''Mixin that sets up the Course model with specified fields and defines
     a success URL for when the course form is successfully submitted.
@@ -118,6 +122,7 @@ class ContentCreateUpdateView(TemplateResponseMixin, View):
     
     def get_form(self, model, *args, **kwargs):
         Form = modelform_factory(model, exclude=['owner','order','created','updated'])
+        
         # passed to the form constructor for intializing form
         return Form(*args, **kwargs)
     
@@ -178,23 +183,66 @@ class ContentOrderView(CsrfExemptMixin,JsonRequestResponseMixin,View):
             Content.objects.filter(id=id,module__course__owner=request.user).update(order=order)
         return self.render_json_response({'saved': 'OK'})
     
+# from django.db.models import Count
+# from .models import Subject
+
+# class CourseListView(TemplateResponseMixin, View):
+#     model = Course
+#     template_name = 'courses/course/list.html'
+    
+#     def get(self, request, subject=None):
+#         # annote is used used for aggeregate function and preobject calculation
+#         # it get avilable course with the count
+#         subjects = Subject.objects.annotate(total_courses=Count('courses'))
+#         courses = Course.objects.annotate(total_modules=Count('modules'))
+#         if subject:
+#             subject = get_object_or_404(Subject, slug=subject)
+#             courses = courses.filter(subject=subject)
+#         #method provides templateResponseMixin to render the object 
+#         return self.render_to_response({'subjects': subjects,'subject': subject,'courses': courses})
+
 from django.db.models import Count
-from .models import Subject
+from django.core.cache import cache
+from django.shortcuts import get_object_or_404
+from .models import Subject, Course
 
 class CourseListView(TemplateResponseMixin, View):
     model = Course
     template_name = 'courses/course/list.html'
-    
+
     def get(self, request, subject=None):
-        # annote is used used for aggeregate function and preobject calculation
-        # it get avilable course with the count
-        subjects = Subject.objects.annotate(total_courses=Count('courses'))
-        courses = Course.objects.annotate(total_modules=Count('modules'))
+        # Attempt to get subjects from the cache
+        subjects = cache.get('all_subjects')
+        print(subjects,"from")
+        if not subjects:
+            # If not found, query the database and cache the results
+            subjects = Subject.objects.annotate(total_courses=Count('courses'))
+            print(subjects)
+            cache.set('all_subjects', subjects, timeout=10)  
+
+        all_courses = Course.objects.annotate(total_modules=Count('modules'))
+
         if subject:
             subject = get_object_or_404(Subject, slug=subject)
-            courses = courses.filter(subject=subject)
-        #method provides templateResponseMixin to render the object 
-        return self.render_to_response({'subjects': subjects,'subject': subject,'courses': courses})
+            key = f'subject_{subject.id}_courses'
+            courses = cache.get(key)
+            if not courses:
+                # If courses for the subject aren't found in the cache, query and cache them
+                courses = all_courses.filter(subject=subject)
+                cache.set(key, courses, timeout=10) 
+        else:
+            # Try getting all courses from the cache
+            courses = cache.get('all_courses')
+            if not courses:
+                # If not cached, query the database and cache the results
+                courses = all_courses
+                cache.set('all_courses', courses, timeout=10)  
+
+        return self.render_to_response({
+            'subjects': subjects,
+            'subject': subject,
+            'courses': courses
+        })
 
 
 from django.views.generic.detail import DetailView
