@@ -167,4 +167,9 @@ cython_debug/
 # Database
 *.sqlite3
 
-.env
+# Ignore SSL certificate and key files
+ssl/*.key
+ssl/*.crt
+
+# Ignore other sensitive files
+*.env
